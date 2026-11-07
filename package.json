@@ -11,7 +11,7 @@
   "scripts": {
     "scrape": "node scripts/run-scrape.mjs",
     "scrape:dry": "node scripts/run-scrape.mjs --dry-run --limit 3",
-    "test": "node --test tests/scraper.test.mjs tests/price-guards.test.mjs tests/product-page-gate.test.mjs"
+    "test": "node --test tests/scraper.test.mjs tests/price-guards.test.mjs tests/product-page-gate.test.mjs tests/discovery.test.mjs tests/phase1-fixes.test.mjs tests/phase3.test.mjs tests/phase4.test.mjs"
   },
   "type": "module",
   "version": "1.0.0"

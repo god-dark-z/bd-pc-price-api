@@ -37,7 +37,7 @@ export const config = {
   degraded: true,
   browserRequired: false,
   notes:
-    "DEGRADED: real product-listing grid URL + pagination unverified; discovery is sitemap-only. Likely Cloudflare. Specs are in prose/bullets, not a table.",
+    "DEGRADED: real product-listing grid URL + pagination unverified; discovery is sitemap-only. Likely Cloudflare. Specs are in prose/bullets, not a table. LIVE 2026-11-08 (VM): sitemap discovery works (6,004 URLs), 5/5 products parsed, 0 blocked; 5700G verified live at 23,400 BDT InStock via JSON-LD. No Cloudflare challenge seen from this VM — but Netlify egress is unproven, keep the degraded flag until a Netlify run confirms.",
   isProductUrl: (u) => u.startsWith("https://pcbstore.com.bd/product/"),
 };
 
@@ -57,6 +57,10 @@ export function parseProduct(config, html, url) {
   const images = dedupeImages([...(product.images || []), ...nextImages]);
   return { ...product, images, image: images[0] || null, image_missing: images.length === 0 };
 }
+
+// Wire the override into the config so scrapeRetailer / scrape-live use it
+// (dispatch added Phase 4: config.parseProduct wins over the shared parser).
+config.parseProduct = parseProduct;
 
 export const scrape = (opts) => scrapeRetailer(config, opts);
 export default config;

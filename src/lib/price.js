@@ -155,11 +155,17 @@ export function reconcilePrices({ visiblePrice, visibleRegular, structuredPrice,
   if (!price && structuredPrice) price = structuredPrice;
 
   if (price && regularPrice && !isPlausibleDiscount(price, regularPrice)) {
-    conflicts.push(
-      `implausible discount: price ${price} vs regular ${regularPrice} = ${savingsPct(price, regularPrice)}% savings — possible MRP/offer inversion`
-    );
-    // Keep the offer price; drop the suspect regular price so no fake -94% deal is ever shown.
-    regularPrice = null;
+    if (regularPrice <= price) {
+      // No discount at all (e.g. a page that prints "Regular Price: X"
+      // equal to the offer price) — not a data error, just drop it silently.
+      regularPrice = null;
+    } else {
+      conflicts.push(
+        `implausible discount: price ${price} vs regular ${regularPrice} = ${savingsPct(price, regularPrice)}% savings — possible MRP/offer inversion`
+      );
+      // Keep the offer price; drop the suspect regular price so no fake -94% deal is ever shown.
+      regularPrice = null;
+    }
   }
   return { price, regularPrice, conflicts };
 }

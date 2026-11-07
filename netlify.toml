@@ -13,6 +13,13 @@
   # Background scrape function: 15 min limit (file name ends -background).
   # Scheduled trigger function: 30s limit.
   node_bundler = "esbuild"
+  # Runtime file reads are NOT bundled by default: a function that reads
+  # data/*.json with fs.readFile works locally but throws ENOENT in
+  # production. Declare the data files so they ship with the function.
+  # (The API also has a JS-module seed fallback in src/lib/seed-data.js,
+  # which is always bundled — this line is belt-and-braces for the JSON
+  # fallback path.)
+  included_files = ["data/*.json"]
 
 # ---------------------------------------------------------------------------
 # DAILY REFRESH TIME — *** CHANGE THE HOUR HERE, AND ONLY HERE ***
@@ -29,5 +36,7 @@
 #   Netlify Blobs; a failed retailer keeps yesterday's data (see README).
 #   Cron expressions run in UTC on the published deploy only.
 # ---------------------------------------------------------------------------
+# TEST TIME (2026-11-08): 00:20 Dhaka = 18:20 UTC — scrape starts at 00:20 tonight.
+# After the test, change the line below back to "0 18 * * *" (daily midnight Dhaka).
 [functions."scrape-scheduled"]
-  schedule = "0 18 * * *"
+  schedule = "20 18 * * *"

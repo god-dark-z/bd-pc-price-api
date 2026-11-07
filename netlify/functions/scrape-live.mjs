@@ -69,7 +69,11 @@ export default async (req) => {
       res.blocked ? 503 : 502
     );
   }
-  const product = parseProduct(config, res.html, productUrl);
+  // Same dispatch as scrapeRetailer (see src/scrapers/opencart.js): an
+  // adapter may override parseProduct (e.g. DRM's JSON-LD-wins correction).
+  const parse =
+    typeof config.parseProduct === "function" ? config.parseProduct : parseProduct;
+  const product = parse(config, res.html, productUrl);
   if (product === null) {
     return json(
       { error: `not a product page — no JSON-LD Product offers / og:type=product / og product price found at ${productUrl} (category or guide page, dropped)` },

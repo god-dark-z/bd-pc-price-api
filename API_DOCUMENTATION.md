@@ -1,4 +1,4 @@
-# BD PC Price Aggregator — API Documentation
+# BD PC Price API — API Documentation
 
 > **For: Mistral Large 4K (and any frontend developer wiring up the site).**
 > This document is the complete, self-contained contract for the price API.
@@ -15,13 +15,13 @@
 | Item | Value |
 |---|---|
 | Data source | Netlify Blobs store `products`, written once a day by the scraper (see §7) |
-| Refresh time | **Daily at 18:00 UTC = 00:00 midnight Dhaka** (Bangladesh is UTC+6, no DST) |
-| Refresh trigger | `netlify.toml` → `[functions."scrape-scheduled"] schedule = "0 18 * * *"` |
+| Refresh time | **Daily — currently 00:20 Dhaka (18:20 UTC), test time.** Standing schedule: 00:00 midnight Dhaka (18:00 UTC). Bangladesh is UTC+6, no DST. |
+| Refresh trigger | `netlify.toml` → `[functions."scrape-scheduled"] schedule = "20 18 * * *"` |
 | Response format | JSON only, `Content-Type: application/json` |
 | Auth | None for the public API. (The admin live-check function needs `SCRAPE_SECRET` — do not use it.) |
 | Caching | Responses carry `Cache-Control: public, max-age=300` (5 minutes) |
 | Currency | All prices are **Bangladeshi Taka (BDT, ৳)**, integer taka, no decimals |
-| Retailers | 10 Tier-1 retailers (see `GET /api/retailers`) |
+| Retailers | 27 retailers across 4 tiers (see `GET /api/retailers`) |
 
 ## 1. Base URL
 
@@ -47,7 +47,7 @@ and no `/v1` prefix.
 |---|---|---|
 | GET | `/api/search` | Search products across retailers, with filters, sorting and pagination |
 | GET | `/api/product` | One product, by its exact retailer product-page URL |
-| GET | `/api/retailers` | The 10 retailers, with product counts and last scrape time |
+| GET | `/api/retailers` | All 27 retailers, with product counts and last scrape time |
 | GET | `/api/stats` | Totals: products per retailer, in-stock / out-of-stock / flagged counts |
 | GET | `/api/status` | **Data freshness**: `last_refresh`, per-retailer status, counts, failures |
 
@@ -333,7 +333,7 @@ the URL is mistyped:
 
 ### 4.3 `GET /api/retailers`
 
-The 10 retailers, with product counts and last scrape time. No parameters.
+All 27 retailers, with product counts and last scrape time. No parameters.
 
 **Example request**
 
@@ -401,7 +401,7 @@ GET https://YOUR-SITE.netlify.app/api/stats
 }
 ```
 
-(`per_retailer` lists all 10 retailers; truncated here. `flagged_products`
+(`per_retailer` lists all 27 retailers; truncated here. `flagged_products`
 counts products with `price_flagged: true`.)
 
 ### 4.5 `GET /api/status` — data freshness
@@ -455,7 +455,7 @@ GET https://YOUR-SITE.netlify.app/api/status
 |---|---|
 | `last_refresh` | ISO timestamp of the last **successful** refresh (any retailer). `null` before the first successful refresh |
 | `last_attempt` | ISO timestamp of the last refresh attempt (including failed ones) |
-| `refresh_schedule` | Cron expression from `netlify.toml` (`"0 18 * * *"`) |
+| `refresh_schedule` | Cron expression from `netlify.toml` (`"20 18 * * *"`) |
 | `refresh_schedule_human` | Human-readable schedule |
 | `total_products` | Products across all retailers in the currently stored data |
 | `per_retailer.<id>.status` | `"ok"` \| `"failed"` \| `"queued"` (queued = refresh started, retailer not finished yet) |
@@ -532,7 +532,7 @@ These rules are enforced server-side, but the frontend must not undo them:
 
 ### 5.4 Caching guidance
 
-- Data refreshes **once a day at 18:00 UTC (00:00 Dhaka)**. There is no
+- Data refreshes **once a day (currently 00:20 Dhaka test time; standing schedule 00:00 Dhaka)**. There is no
   benefit in polling more often than every few minutes, and no new data
   will appear between refreshes.
 - The API sends `Cache-Control: public, max-age=300` — browsers and CDNs
@@ -678,5 +678,9 @@ it at this API instead:
   / >50% day-over-day guards, search filters (`retailer`, `category`,
   `in_stock`), sorting (`lowest`/`highest`), pagination (`limit`, `page`).
   `scrape-live` is admin-only and secret-gated.
+- **2026-11-08 (v1.1)** — 27 retailers (Tier 1-4), seed data as a JS module
+  (`src/lib/seed-data.js`) + `included_files`, discovery diagnostics, 60 s
+  sitemap timeout, premium README with banner. Project name confirmed:
+  **BD PC Price API**.
 - **2026-11-07 (v1.0)** — Initial Netlify-ready scraper + API (search,
   product, retailers, stats) for the 10 Tier-1 retailers.

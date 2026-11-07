@@ -2,7 +2,8 @@
  * store.js — atomic publish + freshness status for the daily refresh.
  *
  * THE DAILY-REFRESH CONTRACT (see README / API_DOCUMENTATION.md):
- *  - Once a day at 18:00 UTC (= 00:00 Dhaka) the scheduled function fires
+ *  - Once a day at 18:20 UTC (= 00:20 Dhaka — the 00:20 test time in
+ *    netlify.toml) the scheduled function fires
  *    and triggers one background job per retailer.
  *  - Each background job scrapes its retailer, then REPLACES that
  *    retailer's blob data ATOMICALLY: the new payload is written to a
@@ -147,8 +148,8 @@ export function emptyStatus() {
   return {
     last_refresh: null,
     last_attempt: null,
-    refresh_schedule: "0 18 * * *",
-    refresh_schedule_human: "daily at 18:00 UTC (= 00:00 Dhaka)",
+    refresh_schedule: "20 18 * * *",
+    refresh_schedule_human: "daily at 18:20 UTC (= 00:20 Dhaka)",
     total_products: 0,
     per_retailer: {},
     failures: [],

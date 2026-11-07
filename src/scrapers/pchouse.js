@@ -9,6 +9,15 @@
  * - Product page: long description; no spec table visible in text fetch;
  *   two page templates exist (new + older with explicit Regular Price field).
  * - Sitemap index: 7 product sitemaps — best crawl seed.
+ * - PHASE 1 (2026-11-08, verified live from this VM): discovery returns
+ *   12,107 URLs and the first products parse cleanly (1STPLAYER NGDP
+ *   750W: 11,700 / was 12,900, In Stock). The 00:20 Netlify run's
+ *   0/0/0 was NOT reproduced here — the pre-diagnostics code swallowed
+ *   discovery failures silently, and the most likely cause is the same
+ *   transient Cloudflare/rate-limit burst that hit Ryans + Techland at
+ *   00:20 (all 10 retailers fired at once). Discovery now retries
+ *   blocked fetches with a long back-off and records every failure in
+ *   discovery_errors, so a repeat will be diagnosable.
  * Verified sample: ASUS Dual RX 9060 XT 16GB — 83,900 (was 92,500), In Stock.
  */
 import { listProductUrls, parseProduct as parseProductShared, scrapeRetailer } from "./opencart.js";
@@ -32,7 +41,7 @@ export const config = {
   crawlDelayMs: 1500,
   ogIsRegularPrice: true,
   degraded: false,
-  notes: "OG price is the regular price. 5700G conflict: listing 21,900 vs OG 25,500. Two page templates exist.",
+  notes: "OG price is the regular price. 5700G conflict: listing 21,900 vs OG 25,500. Two page templates exist. Live-verified from VM 2026-11-08 (12,107 sitemap URLs, 5/5 parsed); Netlify 00:20 failure not reproduced — likely transient rate-limit burst, now retried + recorded.",
   isProductUrl: (u) =>
     u.startsWith("https://www.pchouse.com.bd/") &&
     !u.includes("/pc-components") &&

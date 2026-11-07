@@ -103,8 +103,12 @@ export default async (req) => {
   if (publishable.length === 0) {
     // Empty scrape (blocked, sitemap empty, all pages failed) — a 0-product
     // payload would wipe the catalogue, so refuse it and keep yesterday.
+    // The error names the cause: how many URLs discovery found, how many
+    // were dropped by the product-page gate, and the first discovery
+    // errors — a 0-product failure must never be causeless again.
     const old = (await store.get(`${config.id}.json`, { type: "json" })) || null;
-    const error = `scrape returned 0 publishable products (${result.items.length} parsed, ${result.blocked} blocked, ${result.errors.length} errors) — keeping yesterday's data`;
+    const discovery = (result.discovery_errors || []).slice(0, 3).map((d) => `${d.url} (${d.error})`).join("; ");
+    const error = `scrape returned 0 publishable products (${result.items.length} parsed, ${result.urls_found ?? 0} URLs found, ${result.dropped ?? 0} dropped by product-page gate, ${result.blocked} blocked, ${result.errors.length} product errors)${discovery ? ` — discovery: ${discovery}` : " — discovery found no errors (0 URLs discovered, no sitemap/category fetch failed)"} — keeping yesterday's data`;
     console.error(`[background] ${config.id}: ${error}`);
     await failRetailer(store, config.id, error, old?.products ?? old?.items?.length ?? 0);
     return new Response(JSON.stringify({ retailer: config.id, ok: false, kept_old_data: true, error }), {

@@ -32,7 +32,7 @@ export const config = {
   degraded: true,
   browserRequired: true,
   notes:
-    "DEGRADED: intermittent Cloudflare challenge — highest-risk retailer for plain fetch. Use sitemap for URLs; expect browser-based fetching for full coverage.",
+    "DEGRADED: intermittent Cloudflare challenge — highest-risk retailer for plain fetch. Use sitemap for URLs; expect browser-based fetching for full coverage. LIVE 2026-11-08 (VM): 15/15 products, 0 blocked, 0 errors across two runs (6,496 sitemap URLs); challenge did NOT appear from this VM, but it is intermittent and Netlify egress is unproven — keep the degraded flag until a Netlify run confirms.",
   isProductUrl: (u) =>
     u.startsWith("https://www.selltech.com.bd/") &&
     !u.includes("/Computer-Parts") &&

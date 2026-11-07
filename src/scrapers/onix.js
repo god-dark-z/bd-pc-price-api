@@ -26,7 +26,7 @@ export const config = {
   crawlDelayMs: 1500,
   ogIsRegularPrice: false,
   degraded: false,
-  notes: "Exclude /component-combo (bundles). /component?page=N inferred, not directly verified — re-check live.",
+  notes: "Exclude /component-combo (bundles). LIVE 2026-11-08 (VM): /component sitemap discovery works (10,431 URLs), 5/5 products parsed, 0 blocked; C920 verified live at 12,400 BDT (see script-blob price bug fix in opencart.js/jsonld.js).",
   isProductUrl: (u) =>
     u.startsWith("https://www.onixbd.com/") &&
     !u.includes("/component") &&

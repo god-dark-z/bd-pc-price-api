@@ -63,7 +63,10 @@ async function dryRunRetailer(config, limit) {
   ].slice(0, Math.min(limit, 2));
   for (const url of urls) {
     try {
-      const product = parseProduct(config, html, config.baseUrl + "/sample-product");
+      // Honour an adapter's parseProduct override (same dispatch as
+      // scrapeRetailer) so dry-run fixtures exercise custom parsers.
+      const parse = typeof config.parseProduct === "function" ? config.parseProduct : parseProduct;
+      const product = parse(config, html, config.baseUrl + "/sample-product");
       if (product === null) continue; // fixture is not a product page — dropped
       // Fixture URLs are example.invalid by design in dry-run; keep the
       // retailer's real base so validation of the URL shape is meaningful.
@@ -119,6 +122,7 @@ async function main() {
       `  urls found: ${result.urls_found}, parsed: ${result.items.length}, publishable: ${publishable.length}, dropped: ${dropped}, blocked: ${result.blocked}, errors: ${result.errors.length}`
     );
     for (const e of result.errors.slice(0, 5)) console.log(`  error: ${e.url} — ${e.error}`);
+    for (const d of (result.discovery_errors || []).slice(0, 5)) console.log(`  discovery: ${d.url} — ${d.error}`);
     for (const p of publishable.slice(0, 3)) {
       console.log(`  sample: ${p.name} — ৳${p.price ?? "no price"}${p.regular_price ? ` (was ৳${p.regular_price}, -${p.savings_pct}%)` : ""} [${p.stock}]`);
     }
@@ -149,8 +153,8 @@ async function main() {
   const status = {
     last_refresh: new Date().toISOString(),
     last_attempt: new Date().toISOString(),
-    refresh_schedule: "0 18 * * *",
-    refresh_schedule_human: "daily at 18:00 UTC (= 00:00 Dhaka)",
+    refresh_schedule: "20 18 * * *",
+    refresh_schedule_human: "daily at 18:20 UTC (= 00:20 Dhaka)",
     total_products: 0,
     per_retailer: {},
     failures: [],
@@ -164,7 +168,7 @@ async function main() {
         status: "failed",
         products: kept,
         last_scrape: entry.previous?.finished || null,
-        error: "0 publishable products in this run — previous data kept",
+        error: `0 publishable products in this run (${result.urls_found ?? 0} URLs found, ${dropped} dropped)${(result.discovery_errors || []).length ? ` — discovery: ${(result.discovery_errors || []).slice(0, 3).map((d) => `${d.url} (${d.error})`).join("; ")}` : ""} — previous data kept`,
       };
       status.failures.push({ retailer_id: config.id, error: "0 publishable products in this run" });
       index.retailers[config.id] = { name: config.name, products: kept, dropped, blocked: result.blocked, errors: result.errors.length, finished: result.finished, kept_previous: true };

@@ -31,23 +31,45 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeLowestHighest, applyCrossRetailerOutliers } from "../../src/lib/price.js";
 import { readStatus, buildStatusFromRetailers, emptyStatus } from "../../src/lib/store.js";
+import { SEED_BY_RETAILER } from "../../src/lib/seed-data.js";
 
 const BUNDLED_DIR = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "data");
 
+/**
+ * Pick the first NON-EMPTY retailer payload, in priority order:
+ * Blobs (live daily scrape) -> bundled data/*.json -> seed module.
+ * An empty payload (blob exists but items is missing or []) must NEVER
+ * shadow the fallbacks — it means "no data yet", not "0 products".
+ * Exported so tests can verify the guard without a live Blobs store.
+ */
+export function pickRetailerPayload({ blob, bundled, seed }) {
+  for (const candidate of [blob, bundled, seed]) {
+    if (candidate && Array.isArray(candidate.items) && candidate.items.length > 0) return candidate;
+  }
+  return null;
+}
+
 async function loadRetailer(id) {
+  let blob = null;
   try {
     const store = getStore("products");
-    const blob = await store.get(`${id}.json`, { type: "json" });
-    if (blob && Array.isArray(blob.items)) return blob;
+    blob = await store.get(`${id}.json`, { type: "json" });
   } catch {
-    // Blobs unavailable (local dev / first deploy) — fall through to bundled data.
+    // Blobs unavailable (local dev / first deploy) — fall through.
   }
+  let bundled = null;
   try {
     const raw = await readFile(join(BUNDLED_DIR, `${id}.json`), "utf8");
-    return JSON.parse(raw);
+    bundled = JSON.parse(raw);
   } catch {
-    return null;
+    bundled = null;
   }
+  // Last resort: the seed module. JSON files read with fs.readFile work
+  // locally but are NOT in the deployed Netlify bundle (ENOENT in
+  // production) unless declared in netlify.toml `included_files` — the
+  // imported seed module is always bundled, so the API answers even
+  // before the first nightly refresh has written anything to Blobs.
+  return pickRetailerPayload({ blob, bundled, seed: SEED_BY_RETAILER[id] || null });
 }
 
 async function loadAll() {
@@ -92,8 +114,9 @@ function matchQuery(product, q) {
 }
 
 function parseLimit(value, fallback = 50) {
+  if (value === null || value === undefined || value === "") return fallback;
   const n = Number(value);
-  if (!Number.isFinite(n)) return fallback;
+  if (!Number.isFinite(n) || n < 1) return fallback;
   return Math.min(100, Math.max(1, Math.floor(n)));
 }
 

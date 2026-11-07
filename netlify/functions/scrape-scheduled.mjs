@@ -2,8 +2,10 @@
  * scrape-scheduled.mjs — Netlify Scheduled Function.
  *
  * SCHEDULE (the single source of truth): netlify.toml
- *   [functions."scrape-scheduled"]  schedule = "0 18 * * *"
- * That is ONCE A DAY at 18:00 UTC = 00:00 midnight Dhaka. To change the
+ *   [functions."scrape-scheduled"]  schedule = "20 18 * * *"
+ * That is ONCE A DAY at 18:20 UTC = 00:20 midnight Dhaka (the 00:20 test
+ * time — change netlify.toml back to "0 18 * * *" for the daily midnight
+ * refresh after testing). To change the
  * hour, edit netlify.toml ONLY — this file has no schedule of its own.
  *
  * Scheduled functions have a 30-SECOND limit, so this function does NO
@@ -18,7 +20,7 @@
  */
 import { getStore } from "@netlify/blobs";
 import { RETAILERS } from "../../src/scrapers/index.js";
-import { emptyStatus, updateStatus, STATUS_KEY } from "../../src/lib/store.js";
+import { emptyStatus, updateStatus, writeStatus, STATUS_KEY } from "../../src/lib/store.js";
 
 async function handler() {
   const store = getStore("products");
@@ -71,6 +73,25 @@ async function handler() {
     }
   }
   console.log(`[scheduled] refresh ${started}: triggered ${triggered.length}/10 retailers${failed.length ? `, ${failed.length} trigger failures` : ""}`);
+  // A trigger failure must not leave the retailer with no status entry:
+  // record it as "failed" in the status blob so GET /api/status shows
+  // the retailer never started (instead of silently staying "queued").
+  if (failed.length > 0) {
+    try {
+      let failedStatus = (await store.get(STATUS_KEY, { type: "json" })) || status;
+      for (const f of failed) {
+        const reason = f.error || `background responded HTTP ${f.status}`;
+        failedStatus = updateStatus(failedStatus, f.retailer, {
+          status: "failed",
+          products: failedStatus.per_retailer?.[f.retailer]?.products ?? 0,
+          error: `trigger failed: ${reason}`,
+        });
+      }
+      await writeStatus(store, failedStatus);
+    } catch (e) {
+      console.log(`[scheduled] could not write trigger-failure status: ${e.message}`);
+    }
+  }
   return new Response(JSON.stringify({ triggered, failed, at: started }), {
     status: 200,
     headers: { "content-type": "application/json" },

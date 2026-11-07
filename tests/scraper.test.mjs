@@ -25,9 +25,12 @@ import {
   extractSpecTable,
   extractDescription,
   extractLatestPriceSentence,
+  visibleBodyText,
 } from "../src/lib/jsonld.js";
 import { parseProduct } from "../src/scrapers/opencart.js";
 import { config as startech } from "../src/scrapers/startech.js";
+import { config as onix } from "../src/scrapers/onix.js";
+import { config as selltech } from "../src/scrapers/selltech.js";
 import { RETAILERS } from "../src/scrapers/index.js";
 
 const FIX = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
@@ -82,6 +85,15 @@ test("reconcilePrices: implausible discount drops the suspect regular price", ()
   assert.equal(r.price, 800);
   assert.equal(r.regularPrice, null);
   assert.ok(r.conflicts.length > 0);
+});
+
+test("reconcilePrices: regular price equal to the offer is no discount, not a conflict", () => {
+  // Phase 2 live: Sell Tech prints "Regular Price: 67,000" on a 67,000 offer
+  // (Adobe Premiere Pro). Equal prices mean no discount — drop silently.
+  const r = reconcilePrices({ visiblePrice: 67000, visibleRegular: 67000, structuredPrice: 67000, source: "jsonld" });
+  assert.equal(r.price, 67000);
+  assert.equal(r.regularPrice, null);
+  assert.equal(r.conflicts.length, 0);
 });
 
 // --- normalisation ---
@@ -161,19 +173,93 @@ test("parseProduct (Star Tech fixture): offer 20,600, regular 22,500, specs, in 
   assert.equal(p.conflicts.length, 0);
 });
 
-// --- registry ---
-test("registry: 10 Tier-1 retailers, unique ids, sitemaps present", () => {
-  assert.equal(RETAILERS.length, 10);
+// --- Phase 2 live-test root causes (2026-11-08) ---
+// Onix C920: the live page's raw HTML carries an embedded JSON blob with
+// "price":"12,980৳" while JSON-LD and OG both say 12,400. The old parser
+// read the blob as the visible offer price (and logged a conflict).
+// Sell Tech 7800X3D: the page prints "Regular Price: 41,790৳" next to the
+// 34,000৳ offer, but the old parser never looked for that label, so
+// regular_price was always null and savings_pct always 0.
+const onixC920Html = `<!doctype html><html><head>
+<title>Logitech C920 PRO 1080p Full HD Webcam</title>
+<meta property="og:type" content="product">
+<meta property="og:title" content="Logitech C920 PRO 1080p Full HD Webcam">
+<meta property="product:price:amount" content="12400.00">
+<meta property="product:price:currency" content="BDT">
+<meta property="product:availability" content="In Stock">
+<script type="application/ld+json">{"@type":"Product","name":"Logitech C920 PRO 1080p Full HD Webcam","offers":{"@type":"Offer","price":12400,"priceCurrency":"BDT","availability":"https://schema.org/InStock"}}</script>
+<script>var relatedData = {"price":"12,980\u09f3","note":"The latest price of Logitech C920 PRO is 9,999\u09f3"};</script>
+</head><body><h1>Logitech C920 PRO 1080p Full HD Webcam</h1>
+<div class="description"><p>Full HD 1080p video calling webcam.</p></div>
+</body></html>`;
+
+const selltech7800X3DHtml = `<!doctype html><html><head>
+<title>AMD Ryzen 7 7800X3D Processor</title>
+<meta property="og:type" content="product">
+<meta property="og:title" content="AMD Ryzen 7 7800X3D Processor">
+<meta property="product:price:amount" content="34000.00">
+<meta property="product:price:currency" content="BDT">
+<meta property="product:availability" content="In Stock">
+<script type="application/ld+json">{"@type":"Product","name":"AMD Ryzen 7 7800X3D Processor","offers":{"@type":"Offer","price":34000,"priceCurrency":"BDT","availability":"https://schema.org/InStock"}}</script>
+</head><body><h1>AMD Ryzen 7 7800X3D Processor</h1>
+<div class="price">Price: 34,000\u09f3</div><div class="old-price">Regular Price: 41,790\u09f3</div>
+<p>The latest price of AMD Ryzen 7 7800X3D Processor in Bangladesh is 34,000\u09f3.</p>
+</body></html>`;
+
+test("visibleBodyText strips script/style content (Onix C920 blob)", () => {
+  const text = visibleBodyText(onixC920Html);
+  assert.ok(!text.includes("12,980"), "script-blob price must not appear in visible text");
+  assert.ok(!text.includes("9,999"), "script-embedded sentence must not appear in visible text");
+  assert.ok(text.includes("Logitech C920 PRO"));
+});
+
+test("extractLatestPriceSentence ignores a script-embedded fake sentence", () => {
+  assert.equal(extractLatestPriceSentence(onixC920Html), null);
+});
+
+test("parseProduct (Onix C920 shape): script-blob price ignored, structured 12,400 wins", () => {
+  const p = parseProduct(onix, onixC920Html, "https://www.onixbd.com/logitech-pro-c920-webcam");
+  assert.equal(p.price, 12400);
+  assert.equal(p.regular_price, null);
+  assert.equal(p.stock, "in_stock");
+  assert.equal(p.conflicts.length, 0);
+});
+
+test("parseProduct (Sell Tech 7800X3D shape): Regular Price label captured, savings computed", () => {
+  const p = parseProduct(selltech, selltech7800X3DHtml, "https://www.selltech.com.bd/amd-ryzen-7-7800x3d-processor");
+  assert.equal(p.price, 34000);
+  assert.equal(p.regular_price, 41790);
+  assert.equal(p.savings_pct, 18.6);
+  assert.equal(p.stock, "in_stock");
+  assert.equal(p.conflicts.length, 0);
+});
+
+// --- registry (Phase 3: 24 retailers; Phase 4: 27) ---
+test("registry: 27 retailers, unique ids, sitemaps present", () => {
+  assert.equal(RETAILERS.length, 27);
   const ids = RETAILERS.map((r) => r.id);
-  assert.equal(new Set(ids).size, 10);
+  assert.equal(new Set(ids).size, 27);
+  // Tier 1 first, in original order; Tier 2 + Tier 3 appended (Phase 3).
+  assert.deepEqual(ids.slice(0, 10), [
+    "startech", "ryans", "techland", "pcbstore", "ultra",
+    "pchouse", "selltech", "speedtech", "indexit", "onix",
+  ]);
   for (const r of RETAILERS) {
+    // Flora is the documented exception: HTTP base (its HTTPS times
+    // out from this VM, 2026-11-08) and no sitemap (POST-grid discovery).
+    if (r.id === "flora") {
+      assert.equal(r.baseUrl, "http://www.floralimited.com");
+      assert.deepEqual(r.sitemapUrls, []);
+      continue;
+    }
     assert.ok(r.baseUrl.startsWith("https://"), r.id);
     assert.ok(Array.isArray(r.sitemapUrls) && r.sitemapUrls.length > 0, r.id);
     assert.ok(Number.isFinite(r.crawlDelayMs) && r.crawlDelayMs >= 1000, r.id);
   }
   // Ultra's 20-second crawl delay is respected in its config.
   assert.equal(RETAILERS.find((r) => r.id === "ultra").crawlDelayMs, 20000);
-  // Degraded retailers are flagged.
+  // Degraded retailers are flagged. (Techland was flagged degraded by
+  // the concurrent Phase-1 fixes work, 2026-11-08.)
   const degraded = RETAILERS.filter((r) => r.degraded).map((r) => r.id).sort();
-  assert.deepEqual(degraded, ["pcbstore", "ryans", "selltech"]);
+  assert.deepEqual(degraded, ["computermania", "computervillage", "pcbstore", "potakait", "ryans", "selltech", "techland"]);
 });

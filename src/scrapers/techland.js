@@ -10,7 +10,22 @@
  * - 5700G CONFLICT (research): JSON-LD 20,600 vs page text 22,500 (from 23,500).
  *   The reconciler logs this as a conflict; neither figure is ground truth
  *   until the live page is re-checked.
- * - Sitemap index: 4 product sitemaps. No Cloudflare challenge observed.
+ * - Sitemap index: 4 product sitemaps.
+ * - PHASE 1 VERDICT (2026-11-08): Cloudflare DETERMINISTICALLY
+ *   challenges plain Node fetch from this VM — 403 / challenge on all 4
+ *   sitemaps, the category page AND product pages, while curl with
+ *   identical headers returns 200 every time (curl --http1.1 4/4, curl
+ *   --http2 0/4). Same fingerprint root cause as Ryans (see ryans.js and
+ *   src/lib/http.js): Node's TLS ClientHello (PQ groups/sigalgs,
+ *   1,258-byte key_share) + undici's forced sec-fetch-mode: cors. A
+ *   manual node:https transport with curl-like TLS returned 200 3/3 via
+ *   the proxy tunnel, but its body reads proved unreliable under this
+ *   VM's rate-limited egress, so it was NOT shipped. Discovery retries
+ *   blocks with a long back-off (best chance on Netlify's different
+ *   egress) and records every failure. Browser-required until a Netlify
+ *   run proves otherwise.
+ *   Product page parses from JSON-LD (Ocypus Delta P650: 4,999, InStock,
+ *   regular 5,800 — parsed 2026-11-08 from the saved product page).
  * Verified sample: GIGABYTE Z790M AORUS ELITE AX — 36,300 (old 39,000).
  */
 import { listProductUrls, parseProduct as parseProductShared, scrapeRetailer } from "./opencart.js";
@@ -32,8 +47,9 @@ export const config = {
   ],
   crawlDelayMs: 1500,
   ogIsRegularPrice: false,
-  degraded: false,
-  notes: "Never trust the Save: field. 5700G price conflict (JSON-LD 20,600 vs text 22,500) must be logged, not silently picked.",
+  degraded: true,
+  browserRequired: true,
+  notes: "Never trust the Save: field. 5700G price conflict (JSON-LD 20,600 vs text 22,500) must be logged, not silently picked. DEGRADED: Cloudflare deterministically challenges plain Node fetch from this VM (see header); discovery retries blocks with a long back-off. Browser-required until a Netlify run proves otherwise.",
   isProductUrl: (u) =>
     u.startsWith("https://www.techlandbd.com/") &&
     !u.includes("/pc-components/") &&

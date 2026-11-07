@@ -25,7 +25,7 @@ export const config = {
   crawlDelayMs: 20000,
   ogIsRegularPrice: false,
   degraded: false,
-  notes: "Crawl-Delay: 20 (robots.txt) — this retailer crawls very slowly by design. 0৳ = call-for-price, not a deal.",
+  notes: "Crawl-Delay: 20 (robots.txt) — this retailer crawls very slowly by design. 0৳ = call-for-price, not a deal. LIVE 2026-11-08 (VM): sitemap index.php?route=feed/sitemaps works (13,313 URLs; research timeout was transient), 5/5 products parsed, 0 blocked; 5600GT verified live at 18,000 BDT (regular 18,500).",
   isProductUrl: (u) =>
     u.startsWith("https://www.ultratech.com.bd/") &&
     !u.includes("/products") &&

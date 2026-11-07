@@ -56,6 +56,14 @@ function isProductImageUrl(url) {
   return IMAGE_EXT_RE.test(url) || url.includes("/_next/image") || /\/img\/w\d+\/q\d+\//.test(url);
 }
 
+/** True when the URL ends in a tiny size suffix (-60x60 … -200x200): a thumbnail, not a gallery photo. */
+function isSmallThumb(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== "string") return false;
+  const m = /-(\d+)x(\d+)w?\.(?:jpe?g|png|webp|avif|gif)(?:[?#]|$)/i.exec(rawUrl);
+  if (!m) return false;
+  return Math.max(Number(m[1]), Number(m[2])) <= 200;
+}
+
 /** Decode a Next.js /_next/image?url=<encoded> optimiser URL to the real image URL. */
 export function decodeNextImageUrl(raw, base) {
   if (!raw || !raw.includes("/_next/image")) return null;
@@ -92,10 +100,24 @@ export function extractJsonLd(html) {
   if (!product) return null;
 
   const offers = asArray(product.offers)[0] || {};
-  const price =
+  // WooCommerce/Yoast nests the price one level deeper:
+  // offers[0].priceSpecification[0].price (Smart Technologies). Fall
+  // back to it when offers.price itself is absent.
+  let price =
     offers.price !== undefined && offers.price !== null ? Number(offers.price) : null;
+  if ((price === null || !Number.isFinite(price)) && offers.priceSpecification) {
+    const spec = asArray(offers.priceSpecification)[0] || {};
+    if (spec.price !== undefined && spec.price !== null) price = Number(spec.price);
+  }
   const availability = String(offers.availability || product.availability || "");
   const images = asArray(product.image).filter((i) => typeof i === "string" && i);
+  // Brand: a string, or an object with a .name. CS-Cart (Nexus) emits
+  // {"@type":"Thing","name":""} — an empty .name must become null, never
+  // the whole object (the old `brand?.name || brand` fallback returned
+  // the object itself when .name was empty).
+  const brandNode = product.brand;
+  const brand =
+    typeof brandNode === "string" ? brandNode || null : brandNode?.name || null;
   return {
     name: product.name || null,
     description: product.description || null,
@@ -109,7 +131,7 @@ export function extractJsonLd(html) {
       : /InStock/i.test(availability)
         ? "in_stock"
         : "unknown",
-    brand: product.brand?.name || product.brand || null,
+    brand,
   };
 }
 
@@ -291,33 +313,42 @@ export function extractGalleryImages(html, baseUrl) {
   // as the primary image only. When there is no primary image (no
   // og:image / JSON-LD image), there is no directory to anchor on, so
   // nothing outside the gallery container is accepted.
+  // NOTE: a tiny size suffix (-60x60 … -200x200) marks a thumbnail, not
+  // a gallery photo. Flat-folder stores (Creatus: every 1stPlayer product
+  // lives in /catalog/1stplayer/) defeat the directory check alone — a
+  // related B7-A SIR 60x60 thumb shared the AR-7's directory (live,
+  // 2026-11-08). Small thumbs are redundant duplicates of larger photos
+  // of the same product, so they are dropped from this rule only;
+  // images inside the product's own gallery container (rule 2) are
+  // unaffected, and full-size photos are never size-filtered.
+  const acceptRule3 = (raw) => sameDir(raw) && !isSmallThumb(raw);
   $("img").each((_, img) => {
     const src = $(img).attr("src") || $(img).attr("data-src") || $(img).attr("data-lazy-src");
-    if (src && sameDir(src)) push(src);
+    if (src && acceptRule3(src)) push(src);
     const srcset = $(img).attr("srcset") || $(img).attr("data-srcset") || "";
     for (const part of srcset.split(",")) {
       const candidate = part.trim().split(/\s+/)[0];
-      if (candidate && sameDir(candidate)) push(candidate);
+      if (candidate && acceptRule3(candidate)) push(candidate);
     }
   });
   $('a[href]').each((_, a) => {
     const href = $(a).attr("href");
-    if (href && IMAGE_EXT_RE.test(href) && sameDir(href)) push(href);
+    if (href && IMAGE_EXT_RE.test(href) && acceptRule3(href)) push(href);
   });
   const raw = String(html || "");
   for (const m of raw.matchAll(/\/_next\/image\?url=([^"'&\s]+)/g)) {
     try {
       const decoded = decodeURIComponent(m[1]);
-      if (sameDir(decoded)) push(decoded);
+      if (acceptRule3(decoded)) push(decoded);
     } catch {
       // Undecodable — skip, other sources may still cover it.
     }
   }
   for (const m of raw.matchAll(/["'`](https?:\/\/[^"'`\s]+?\.(?:jpe?g|png|webp|avif))["'`]/gi)) {
-    if (sameDir(m[1])) push(m[1]);
+    if (acceptRule3(m[1])) push(m[1]);
   }
   for (const m of raw.matchAll(/["'`](\/img\/w\d+\/q\d+\/[^"'`\s]+?\.(?:jpe?g|png|webp|avif))["'`]/gi)) {
-    if (sameDir(m[1])) push(m[1]);
+    if (acceptRule3(m[1])) push(m[1]);
   }
 
   return out;
@@ -423,10 +454,32 @@ export function extractDescription(html) {
   return text.replace(/\s+/g, " ").trim().slice(0, 4000) || null;
 }
 
+/**
+ * Visible body text: what a human actually sees on the page.
+ * BUG (2026-11-08 live test, Onix C920): cheerio's $.text() / $("body").text()
+ * INCLUDES <script> contents, so an embedded JSON blob such as
+ * "price":"12,980৳" was read as the visible offer price — while JSON-LD
+ * and OG both said 12,400. Every visible-price regex must run on THIS
+ * text (scripts, styles, noscript and templates stripped), never on raw
+ * HTML or whole-document text.
+ */
+export function visibleBodyText(html) {
+  const $ = cheerio.load(html || "");
+  // Struck-through text is an OLD/superseded price, never the current
+  // offer — Creatus AR-7 live bug (2026-11-08): the compare table prints
+  // "<td>Price</td><td><strike>6,800৳</strike> 5,900৳</td>", and the
+  // price-label regex below took the struck 6,800 as the offer while
+  // JSON-LD/OG said 5,900. Stripping <strike>/<del>/<s> keeps the
+  // offer-price regexes honest; the regular price still survives via the
+  // "Regular Price:" label and the .product-price-old block, which are
+  // not struck-through elements.
+  $("script, style, noscript, template, strike, del, s").remove();
+  return $("body").text().replace(/\s+/g, " ").trim();
+}
+
 /** The visible "latest price … is X" sentence many OpenCart sites print. Returns the amount or null. */
 export function extractLatestPriceSentence(html) {
-  const $ = cheerio.load(html || "");
-  const body = $.text();
+  const body = visibleBodyText(html);
   // "The latest price of AMD Ryzen 7 5700G … is 20,600৳" — the "is" before
   // the amount is essential: without it the regex would match the model
   // number (5700) instead of the price.
