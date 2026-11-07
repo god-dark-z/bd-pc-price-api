@@ -39,4 +39,4 @@
 # TEST TIME (2026-11-08): 00:20 Dhaka = 18:20 UTC — scrape starts at 00:20 tonight.
 # After the test, change the line below back to "0 18 * * *" (daily midnight Dhaka).
 [functions."scrape-scheduled"]
-  schedule = "20 18 * * *"
+  schedule = "30 21 * * *"
