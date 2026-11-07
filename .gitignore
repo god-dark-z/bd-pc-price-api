@@ -1,0 +1,5 @@
+node_modules/
+data/*.json
+!data/sample-5700g.json
+.env
+.netlify/

@@ -1,0 +1,18 @@
+{
+  "dependencies": {
+    "@netlify/blobs": "^9.0.0",
+    "cheerio": "^1.0.0"
+  },
+  "description": "Scraper + API for Bangladeshi PC-component retailers (Tier 1: Star Tech, Ryans, Techland, PCB Store, Ultra, PC House, Sell Tech, Speed Tech, Index IT, Onix BD). Netlify Functions + Netlify Blobs, no server, no GitHub Actions.",
+  "engines": {
+    "node": ">=20"
+  },
+  "name": "bd-pc-scraper",
+  "scripts": {
+    "scrape": "node scripts/run-scrape.mjs",
+    "scrape:dry": "node scripts/run-scrape.mjs --dry-run --limit 3",
+    "test": "node --test tests/scraper.test.mjs tests/price-guards.test.mjs tests/product-page-gate.test.mjs"
+  },
+  "type": "module",
+  "version": "1.0.0"
+}

@@ -1,0 +1,33 @@
+# Netlify config — BD PC price scraper
+# Functions live in netlify/functions. Scheduled + background functions are
+# declared in their own files via `export const config = {...}` (Netlify
+# Functions v2 style), EXCEPT the refresh schedule, which lives HERE so
+# there is exactly one place to change the refresh time. No build step is
+# needed for the API; the site itself is whatever front-end the user
+# deploys alongside this repo.
+[build]
+  functions = "netlify/functions"
+
+[functions]
+  # Synchronous API functions: 60s limit (Netlify default).
+  # Background scrape function: 15 min limit (file name ends -background).
+  # Scheduled trigger function: 30s limit.
+  node_bundler = "esbuild"
+
+# ---------------------------------------------------------------------------
+# DAILY REFRESH TIME — *** CHANGE THE HOUR HERE, AND ONLY HERE ***
+#   schedule = "0 18 * * *"  means: every day at 18:00 UTC.
+#   18:00 UTC = 00:00 midnight in Dhaka (Bangladesh is UTC+6, no DST).
+#   To refresh at a different Dhaka hour, change the UTC hour here:
+#   Dhaka hour = UTC hour + 6, so e.g. 02:00 Dhaka = "0 20 * * *" (20:00 UTC).
+#   The scheduled function (netlify/functions/scrape-scheduled.mjs) has NO
+#   schedule of its own — it reads this entry. Do NOT add a second schedule
+#   in the function file; the two would conflict.
+#   What happens at 18:00 UTC: the scheduled function fires ONCE and
+#   triggers one background job per retailer (all 10). Each background job
+#   scrapes its retailer and atomically replaces that retailer's data in
+#   Netlify Blobs; a failed retailer keeps yesterday's data (see README).
+#   Cron expressions run in UTC on the published deploy only.
+# ---------------------------------------------------------------------------
+[functions."scrape-scheduled"]
+  schedule = "0 18 * * *"
