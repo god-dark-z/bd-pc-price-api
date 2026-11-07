@@ -30,4 +30,4 @@
 #   Cron expressions run in UTC on the published deploy only.
 # ---------------------------------------------------------------------------
 [functions."scrape-scheduled"]
-  schedule = "0 18 * * *"
+  schedule = "20 18 * * *"
